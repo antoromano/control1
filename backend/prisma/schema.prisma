@@ -1,0 +1,121 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model DailyLog {
+  id         String   @id @default(cuid())
+  date       DateTime @unique @db.Date
+  kcal       Int?
+  carbsG     Float?
+  proteinG   Float?
+  fatG       Float?
+  sleepHours Float?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("daily_logs")
+}
+
+enum MediaType {
+  BOOK
+  MOVIE
+  SERIES
+}
+
+model MediaLog {
+  id        String    @id @default(cuid())
+  date      DateTime  @db.Date
+  type      MediaType
+  title     String
+  rating    Int?
+  notes     String?
+  createdAt DateTime  @default(now())
+
+  @@map("media_logs")
+}
+
+model Exercise {
+  id          String        @id @default(cuid())
+  name        String        @unique
+  muscleGroup String?
+  createdAt   DateTime      @default(now())
+  logs        ExerciseLog[]
+
+  @@map("exercises")
+}
+
+model ExerciseLog {
+  id          String    @id @default(cuid())
+  exerciseId  String
+  exercise    Exercise  @relation(fields: [exerciseId], references: [id])
+  date        DateTime  @db.Date
+  time        DateTime?
+  reps        Int
+  weight      Float
+  rir         Float?
+  restSeconds Int?
+  createdAt   DateTime  @default(now())
+
+  @@index([exerciseId, date])
+  @@map("exercise_logs")
+}
+
+enum HabitType {
+  GOOD
+  BAD
+}
+
+enum HabitTrackingType {
+  CHECKBOX
+  COUNT
+}
+
+model Habit {
+  id           String            @id @default(cuid())
+  name         String
+  type         HabitType
+  trackingType HabitTrackingType
+  createdAt    DateTime          @default(now())
+  logs         HabitLog[]
+
+  @@map("habits")
+}
+
+model HabitLog {
+  id      String   @id @default(cuid())
+  habitId String
+  habit   Habit    @relation(fields: [habitId], references: [id])
+  date    DateTime @db.Date
+  value   Int
+
+  @@unique([habitId, date])
+  @@map("habit_logs")
+}
+
+enum PeriodType {
+  WEEK
+  MONTH
+}
+
+model PeriodNote {
+  id          String     @id @default(cuid())
+  periodType  PeriodType
+  periodStart DateTime   @db.Date
+  category    String
+  decision    String
+  createdAt   DateTime   @default(now())
+
+  @@map("period_notes")
+}
