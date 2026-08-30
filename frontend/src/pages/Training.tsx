@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
-import { api, type Exercise, type ExerciseHistory, type ExerciseLog } from "../lib/api";
+import { api, type Exercise, type ExerciseHistory, type ExerciseLog, type ExerciseMuscle } from "../lib/api";
 import { Button, Card, Field, Input, SectionTitle } from "../components/ui";
+import { MUSCLE_GROUPS } from "../lib/muscleGroups";
 import { formatDate, todayISO } from "../lib/date";
+
+const emptyMuscleRow: ExerciseMuscle = { muscleGroup: MUSCLE_GROUPS[0], factor: 1 };
 
 export default function Training() {
   const [exercises, setExercises] = useState<Exercise[]>([]);
@@ -10,18 +13,24 @@ export default function Training() {
   const [todayLogs, setTodayLogs] = useState<ExerciseLog[]>([]);
 
   const [newExerciseName, setNewExerciseName] = useState("");
-  const [newExerciseMuscle, setNewExerciseMuscle] = useState("");
+  const [newExerciseParent, setNewExerciseParent] = useState("");
+  const [muscleRows, setMuscleRows] = useState<ExerciseMuscle[]>([emptyMuscleRow]);
 
   const [logForm, setLogForm] = useState({
     date: todayISO(),
     reps: "",
-    weight: "",
+    weight: "0",
     rir: "",
     restSeconds: "",
+    notes: "",
   });
 
-  const loadExercises = () => api.exercises().then(setExercises);
-  const loadTodayLogs = () => api.exerciseLogsByDate(todayISO()).then(setTodayLogs);
+  const loadExercises = () => {
+    api.exercises().then(setExercises);
+  };
+  const loadTodayLogs = () => {
+    api.exerciseLogsByDate(todayISO()).then(setTodayLogs);
+  };
 
   useEffect(() => {
     loadExercises();
@@ -36,30 +45,41 @@ export default function Training() {
     }
   }, [selectedId]);
 
+  const topLevel = exercises.filter((e) => !e.parentId);
+  const variantsOf = (parentId: string) => exercises.filter((e) => e.parentId === parentId);
+  const selectedExercise = exercises.find((e) => e.id === selectedId);
+
+  function updateMuscleRow(index: number, patch: Partial<ExerciseMuscle>) {
+    setMuscleRows((rows) => rows.map((r, i) => (i === index ? { ...r, ...patch } : r)));
+  }
+
   async function handleCreateExercise(e: React.FormEvent) {
     e.preventDefault();
     if (!newExerciseName.trim()) return;
     const exercise = await api.createExercise({
       name: newExerciseName.trim(),
-      muscleGroup: newExerciseMuscle.trim() || null,
+      parentId: newExerciseParent || null,
+      muscles: muscleRows.filter((r) => r.muscleGroup),
     });
     setNewExerciseName("");
-    setNewExerciseMuscle("");
+    setNewExerciseParent("");
+    setMuscleRows([emptyMuscleRow]);
     await loadExercises();
     setSelectedId(exercise.id);
   }
 
   async function handleLogSet(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedId || !logForm.reps || !logForm.weight) return;
+    if (!selectedId || !logForm.reps) return;
     await api.createExerciseLog(selectedId, {
       date: logForm.date,
       reps: Number(logForm.reps),
-      weight: Number(logForm.weight),
+      weight: logForm.weight ? Number(logForm.weight) : 0,
       rir: logForm.rir ? Number(logForm.rir) : undefined,
       restSeconds: logForm.restSeconds ? Number(logForm.restSeconds) : undefined,
+      notes: logForm.notes.trim() || undefined,
     });
-    setLogForm({ ...logForm, reps: "", weight: "", rir: "", restSeconds: "" });
+    setLogForm({ ...logForm, reps: "", rir: "", restSeconds: "", notes: "" });
     api.exerciseHistory(selectedId).then(setHistory);
     loadTodayLogs();
   }
@@ -84,33 +104,106 @@ export default function Training() {
               className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm text-neutral-100 outline-none focus:border-neutral-400"
             >
               <option value="">Seleziona un esercizio...</option>
-              {exercises.map((ex) => (
-                <option key={ex.id} value={ex.id}>
-                  {ex.name}
-                  {ex.muscleGroup ? ` (${ex.muscleGroup})` : ""}
-                </option>
+              {topLevel.map((ex) => (
+                <optgroup key={ex.id} label={ex.name}>
+                  <option value={ex.id}>{ex.name}</option>
+                  {variantsOf(ex.id).map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {"— " + v.name}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </Field>
+          {selectedExercise && selectedExercise.muscles.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {selectedExercise.muscles.map((m) => (
+                <span
+                  key={m.muscleGroup}
+                  className="rounded bg-neutral-800 px-2 py-0.5 text-xs text-neutral-400"
+                >
+                  {m.muscleGroup} × {m.factor}
+                </span>
+              ))}
+            </div>
+          )}
 
-          <form onSubmit={handleCreateExercise} className="flex flex-wrap items-end gap-3">
-            <Field label="Nuovo esercizio">
-              <Input
-                value={newExerciseName}
-                onChange={(e) => setNewExerciseName(e.target.value)}
-                placeholder="es. Squat"
-              />
-            </Field>
-            <Field label="Gruppo muscolare">
-              <Input
-                value={newExerciseMuscle}
-                onChange={(e) => setNewExerciseMuscle(e.target.value)}
-                placeholder="es. gambe"
-              />
-            </Field>
-            <Button type="submit" variant="ghost">
-              Aggiungi esercizio
-            </Button>
+          <form onSubmit={handleCreateExercise} className="flex flex-col gap-3 border-t border-neutral-800 pt-4">
+            <div className="flex flex-wrap items-end gap-3">
+              <Field label="Nuovo esercizio o variante">
+                <Input
+                  value={newExerciseName}
+                  onChange={(e) => setNewExerciseName(e.target.value)}
+                  placeholder="es. Push up profondo"
+                />
+              </Field>
+              <Field label="Variante di (opzionale)">
+                <select
+                  value={newExerciseParent}
+                  onChange={(e) => setNewExerciseParent(e.target.value)}
+                  className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm text-neutral-100 outline-none focus:border-neutral-400"
+                >
+                  <option value="">Nessuna (esercizio base)</option>
+                  {topLevel.map((ex) => (
+                    <option key={ex.id} value={ex.id}>
+                      {ex.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <span className="text-sm text-neutral-300">Gruppi muscolari coinvolti</span>
+              {muscleRows.map((row, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <select
+                    value={row.muscleGroup}
+                    onChange={(e) => updateMuscleRow(i, { muscleGroup: e.target.value })}
+                    className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm text-neutral-100 outline-none focus:border-neutral-400"
+                  >
+                    {MUSCLE_GROUPS.map((mg) => (
+                      <option key={mg} value={mg}>
+                        {mg}
+                      </option>
+                    ))}
+                  </select>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    min={0}
+                    max={1}
+                    value={row.factor}
+                    onChange={(e) => updateMuscleRow(i, { factor: Number(e.target.value) })}
+                    className="w-20"
+                    title="Fattore di coinvolgimento (1 = primario, 0.5 = secondario)"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setMuscleRows((rows) => rows.filter((_, idx) => idx !== i))}
+                  >
+                    ✕
+                  </Button>
+                </div>
+              ))}
+              <div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setMuscleRows((rows) => [...rows, { ...emptyMuscleRow }])}
+                >
+                  + Aggiungi gruppo muscolare
+                </Button>
+              </div>
+            </div>
+
+            <div>
+              <Button type="submit" variant="ghost">
+                Salva esercizio
+              </Button>
+            </div>
           </form>
         </Card>
       </div>
@@ -132,11 +225,14 @@ export default function Training() {
                 )}
                 <ul className="mt-3 flex flex-col gap-1">
                   {history.recentLogs.slice(0, 8).map((l) => (
-                    <li key={l.id} className="flex justify-between border-t border-neutral-800 pt-1">
-                      <span>{formatDate(l.date)}</span>
-                      <span className="text-neutral-100">
-                        {l.weight}kg × {l.reps} {l.rir !== null ? `RIR${l.rir}` : ""}
-                      </span>
+                    <li key={l.id} className="border-t border-neutral-800 pt-1">
+                      <div className="flex justify-between">
+                        <span>{formatDate(l.date)}</span>
+                        <span className="text-neutral-100">
+                          {l.weight}kg × {l.reps} {l.rir !== null ? `RIR${l.rir}` : ""}
+                        </span>
+                      </div>
+                      {l.notes && <p className="text-xs text-neutral-500">{l.notes}</p>}
                     </li>
                   ))}
                 </ul>
@@ -157,14 +253,6 @@ export default function Training() {
                     onChange={(e) => setLogForm({ ...logForm, date: e.target.value })}
                   />
                 </Field>
-                <Field label="Peso (kg)">
-                  <Input
-                    type="number"
-                    step="0.5"
-                    value={logForm.weight}
-                    onChange={(e) => setLogForm({ ...logForm, weight: e.target.value })}
-                  />
-                </Field>
                 <Field label="Ripetizioni">
                   <Input
                     type="number"
@@ -172,14 +260,22 @@ export default function Training() {
                     onChange={(e) => setLogForm({ ...logForm, reps: e.target.value })}
                   />
                 </Field>
-                <Field label="RIR">
+                <Field label="Peso (kg, 0 = corpo libero)">
+                  <Input
+                    type="number"
+                    step="0.5"
+                    value={logForm.weight}
+                    onChange={(e) => setLogForm({ ...logForm, weight: e.target.value })}
+                  />
+                </Field>
+                <Field label="RIR (opzionale)">
                   <Input
                     type="number"
                     value={logForm.rir}
                     onChange={(e) => setLogForm({ ...logForm, rir: e.target.value })}
                   />
                 </Field>
-                <Field label="Recupero (sec)">
+                <Field label="Recupero sec (opzionale)">
                   <Input
                     type="number"
                     value={logForm.restSeconds}
@@ -187,6 +283,13 @@ export default function Training() {
                   />
                 </Field>
               </div>
+              <Field label="Note (opzionale)">
+                <Input
+                  value={logForm.notes}
+                  onChange={(e) => setLogForm({ ...logForm, notes: e.target.value })}
+                  placeholder="es. esecuzione lenta, ginocchio fastidioso..."
+                />
+              </Field>
               <Button type="submit">Aggiungi serie</Button>
             </form>
           </Card>
@@ -210,6 +313,7 @@ export default function Training() {
                         {l.weight}kg × {l.reps}
                         {l.rir !== null ? ` — RIR ${l.rir}` : ""}
                         {l.restSeconds ? ` — rec. ${l.restSeconds}s` : ""}
+                        {l.notes ? ` — ${l.notes}` : ""}
                       </span>
                       <Button variant="danger" onClick={() => handleDeleteLog(l.id)}>
                         Elimina

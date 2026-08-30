@@ -46,13 +46,30 @@ model MediaLog {
 }
 
 model Exercise {
-  id          String        @id @default(cuid())
-  name        String        @unique
-  muscleGroup String?
-  createdAt   DateTime      @default(now())
-  logs        ExerciseLog[]
+  id        String           @id @default(cuid())
+  name      String           @unique
+  parentId  String?
+  parent    Exercise?        @relation("ExerciseVariants", fields: [parentId], references: [id], onDelete: SetNull)
+  variants  Exercise[]       @relation("ExerciseVariants")
+  muscles   ExerciseMuscle[]
+  createdAt DateTime         @default(now())
+  logs      ExerciseLog[]
 
   @@map("exercises")
+}
+
+// Un esercizio può coinvolgere più gruppi muscolari con un peso diverso
+// (es. distensioni: petto 1.0, tricipiti 0.5, spalle 0.3) — usato nel calcolo
+// del volume allenante per gruppo muscolare nei report.
+model ExerciseMuscle {
+  id          String   @id @default(cuid())
+  exerciseId  String
+  exercise    Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  muscleGroup String
+  factor      Float    @default(1)
+
+  @@unique([exerciseId, muscleGroup])
+  @@map("exercise_muscles")
 }
 
 model ExerciseLog {
@@ -65,6 +82,7 @@ model ExerciseLog {
   weight      Float
   rir         Float?
   restSeconds Int?
+  notes       String?
   createdAt   DateTime  @default(now())
 
   @@index([exerciseId, date])

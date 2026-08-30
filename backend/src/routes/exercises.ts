@@ -1,16 +1,47 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma";
+import { isMuscleGroup } from "../constants/muscleGroups";
 
 export const exercisesRouter = Router();
 
 exercisesRouter.get("/", async (_req, res) => {
-  const exercises = await prisma.exercise.findMany({ orderBy: { name: "asc" } });
+  const exercises = await prisma.exercise.findMany({
+    orderBy: { name: "asc" },
+    include: { muscles: true },
+  });
   res.json(exercises);
 });
 
+interface MuscleInput {
+  muscleGroup: string;
+  factor?: number;
+}
+
 exercisesRouter.post("/", async (req, res) => {
-  const { name, muscleGroup } = req.body;
-  const exercise = await prisma.exercise.create({ data: { name, muscleGroup } });
+  const { name, parentId, muscles } = req.body as {
+    name: string;
+    parentId?: string | null;
+    muscles?: MuscleInput[];
+  };
+
+  const invalid = (muscles ?? []).find((m) => !isMuscleGroup(m.muscleGroup));
+  if (invalid) {
+    return res.status(400).json({ error: `Gruppo muscolare non valido: ${invalid.muscleGroup}` });
+  }
+
+  const exercise = await prisma.exercise.create({
+    data: {
+      name,
+      parentId: parentId || null,
+      muscles: {
+        create: (muscles ?? []).map((m) => ({
+          muscleGroup: m.muscleGroup,
+          factor: m.factor ?? 1,
+        })),
+      },
+    },
+    include: { muscles: true },
+  });
   res.status(201).json(exercise);
 });
 
@@ -34,7 +65,7 @@ exercisesRouter.get("/:id/history", async (req, res) => {
 
 exercisesRouter.post("/:id/logs", async (req, res) => {
   const { id } = req.params;
-  const { date, time, reps, weight, rir, restSeconds } = req.body;
+  const { date, time, reps, weight, rir, restSeconds, notes } = req.body;
   const log = await prisma.exerciseLog.create({
     data: {
       exerciseId: id,
@@ -44,6 +75,7 @@ exercisesRouter.post("/:id/logs", async (req, res) => {
       weight,
       rir,
       restSeconds,
+      notes,
     },
   });
   res.status(201).json(log);

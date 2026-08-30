@@ -37,10 +37,16 @@ export interface MediaLog {
   notes: string | null;
 }
 
+export interface ExerciseMuscle {
+  muscleGroup: string;
+  factor: number;
+}
+
 export interface Exercise {
   id: string;
   name: string;
-  muscleGroup: string | null;
+  parentId: string | null;
+  muscles: ExerciseMuscle[];
 }
 
 export interface ExerciseLog {
@@ -52,6 +58,7 @@ export interface ExerciseLog {
   weight: number;
   rir: number | null;
   restSeconds: number | null;
+  notes: string | null;
   exercise?: Exercise;
 }
 
@@ -113,13 +120,20 @@ export const api = {
   deleteMediaLog: (id: string) => request<void>("DELETE", `/api/media-logs/${id}`),
 
   exercises: () => request<Exercise[]>("GET", "/api/exercises"),
-  createExercise: (data: Omit<Exercise, "id">) =>
+  createExercise: (data: { name: string; parentId?: string | null; muscles: ExerciseMuscle[] }) =>
     request<Exercise>("POST", "/api/exercises", data),
   exerciseHistory: (id: string) =>
     request<ExerciseHistory>("GET", `/api/exercises/${id}/history`),
   createExerciseLog: (
     exerciseId: string,
-    data: { date: string; reps: number; weight: number; rir?: number; restSeconds?: number }
+    data: {
+      date: string;
+      reps: number;
+      weight: number;
+      rir?: number;
+      restSeconds?: number;
+      notes?: string;
+    }
   ) => request<ExerciseLog>("POST", `/api/exercises/${exerciseId}/logs`, data),
 
   exerciseLogsByDate: (date: string) =>
