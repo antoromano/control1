@@ -1,0 +1,8 @@
+{
+  "name": "control1",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ]
+}
