@@ -8,6 +8,11 @@ mediaLogRouter.get("/", async (_req, res) => {
   res.json(logs);
 });
 
+mediaLogRouter.delete("/:id", async (req, res) => {
+  await prisma.mediaLog.delete({ where: { id: req.params.id } });
+  res.status(204).end();
+});
+
 mediaLogRouter.post("/", async (req, res) => {
   const { date, type, title, rating, notes } = req.body;
   const log = await prisma.mediaLog.create({

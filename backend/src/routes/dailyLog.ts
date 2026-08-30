@@ -17,6 +17,11 @@ dailyLogRouter.get("/", async (req, res) => {
   res.json(logs);
 });
 
+dailyLogRouter.delete("/:id", async (req, res) => {
+  await prisma.dailyLog.delete({ where: { id: req.params.id } });
+  res.status(204).end();
+});
+
 dailyLogRouter.post("/", async (req, res) => {
   const { date, kcal, carbsG, proteinG, fatG, sleepHours } = req.body;
   const log = await prisma.dailyLog.upsert({
