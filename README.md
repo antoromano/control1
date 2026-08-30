@@ -3,15 +3,21 @@
 Tracker personale per nutrizione, allenamenti (log flessibile, non a scheda fissa),
 abitudini e media (libri/film/serie), con viste aggregate settimanali/mensili.
 
+**App**: https://frontend-production-9cd8.up.railway.app
+**API**: https://backend-production-8e52.up.railway.app
+
 ## Stack
 
 - **Backend**: Node.js + TypeScript + Express + Prisma ORM
 - **Database**: PostgreSQL
-- **Frontend**: React + Vite + TypeScript + Tailwind CSS
-- **Deploy**: Railway (un unico servizio: Express serve sia le API sia i file
-  statici del frontend buildato) + Postgres gestito
+- **Frontend**: React + Vite + TypeScript + Tailwind CSS + React Router (hash routing)
+- **Deploy**: Railway, tre servizi nel progetto `control1`:
+  - `backend` — API Express (rootDirectory `/backend`)
+  - `frontend` — sito statico buildato con Vite (rootDirectory `/frontend`)
+  - `Postgres` — database gestito
 
-Monorepo npm workspaces: `backend/` e `frontend/`.
+`backend/` e `frontend/` sono due cartelle indipendenti, ciascuna con il
+proprio `package.json`/lockfile — non è un npm workspace.
 
 ## Sviluppo locale
 
@@ -19,7 +25,8 @@ Il database usato in locale è lo stesso Postgres di Railway (nessun Docker),
 raggiungibile tramite un TCP proxy pubblico già configurato sul servizio.
 
 ```bash
-npm install               # installa entrambi i workspace dalla root
+cd backend && npm install
+cd frontend && npm install
 ```
 
 Crea `backend/.env` partendo da `backend/.env.example` con la `DATABASE_URL`
@@ -27,27 +34,26 @@ del proxy Railway (`railway variable list --service Postgres` per recuperarla,
 usando l'host/porta del TCP proxy invece di quello interno `.railway.internal`).
 
 ```bash
-npm run dev --workspace=backend    # API su http://localhost:3001
-npm run dev --workspace=frontend   # frontend su http://localhost:5173 (proxy verso :3001)
+cd backend && npm run dev     # API su http://localhost:3001
+cd frontend && npm run dev    # frontend su http://localhost:5173 (proxy verso :3001)
 ```
 
 Migrazioni:
 
 ```bash
-npm run prisma:migrate --workspace=backend   # crea/applica una nuova migration in dev
+cd backend && npm run prisma:migrate   # crea/applica una nuova migration in dev
 ```
 
 ## Build di produzione
 
 ```bash
-npm run build --workspace=frontend
-npm run build --workspace=backend
-npm run prisma:deploy --workspace=backend   # applica le migration
-npm start --workspace=backend               # serve API + frontend/dist sulla stessa porta
+cd backend && npm run build && npm run prisma:deploy && npm start
+cd frontend && npm run build   # output in frontend/dist, servito come sito statico
 ```
 
-Questo è esattamente ciò che esegue Railway ad ogni deploy (vedi build/start
-command del servizio `backend` nel progetto Railway `control1`).
+Il frontend in produzione chiama il backend tramite la variabile
+`VITE_API_URL` (impostata a build-time su Railway con l'URL pubblico del
+servizio `backend`); in locale resta vuota e passa dal proxy di Vite.
 
 ## Modello dati
 
@@ -66,7 +72,10 @@ command del servizio `backend` nel progetto Railway `control1`).
 - `GET/POST /api/exercises`, `POST /api/exercises/:id/logs`
 - `GET /api/exercises/:id/history` — giorni dall'ultimo allenamento + storico
   recente per quell'esercizio
-- `GET/POST /api/habits`, `POST /api/habits/:id/logs`
+- `GET /api/exercise-logs?date=` — tutte le serie di un giorno (sessione di oggi)
+- `GET/POST /api/habits`, `GET /api/habits/logs?date=`, `POST /api/habits/:id/logs`
 - `GET /api/stats/muscle-volume?from=&to=` — volume allenante per gruppo muscolare
 - `GET /api/stats/nutrition?from=&to=` — medie di kcal/macro/sonno nel periodo
 - `GET/POST /api/period-notes`
+- `DELETE` su `daily-logs/:id`, `media-logs/:id`, `exercise-logs/:id`,
+  `habits/logs/:id` — per correggere errori di inserimento
